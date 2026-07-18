@@ -615,17 +615,43 @@ fn validate_download_filename(name: &str) -> Result<(), String> {
 pub async fn tls_export_ca_to_downloads(
     state: State<'_, AppState>,
 ) -> Result<ExportedCaFiles, String> {
+    let _ = state
+        .logs
+        .emit(
+            "INFO",
+            "tls",
+            "starting CA export to downloads",
+        )
+        .await;
+
     if state.tls.ca_info().await.is_none() {
-        let _ = state.tls.generate_ca().await.map_err(String::from)?;
+        let _ = state
+            .logs
+            .emit(
+                "INFO",
+                "tls",
+                "CA not found, generating new CA",
+            )
+            .await;
+        state.tls.generate_ca().await.map_err(|e| format!("CA generation failed: {e}"))?;
     }
 
-    let pem = state.tls.export_ca_pem().await.map_err(String::from)?;
-    let der = state.tls.export_ca_der().await.map_err(String::from)?;
+    let pem = state.tls.export_ca_pem().await.map_err(|e| format!("CA PEM export failed: {e}"))?;
+    let der = state.tls.export_ca_der().await.map_err(|e| format!("CA DER export failed: {e}"))?;
 
     let dir = downloads_proxer_dir(&state)?;
-    tokio::fs::create_dir_all(&dir)
-        .await
-        .map_err(|e| e.to_string())?;
+    let _ = state
+        .logs
+        .emit(
+            "INFO",
+            "tls",
+            &format!("downloads directory: {}", dir.to_string_lossy()),
+        )
+        .await;
+
+    // Ignore directory creation errors - if it exists, that's fine. 
+    // If it doesn't exist and can't be created, the file write will fail.
+    let _ = tokio::fs::create_dir_all(&dir).await;
 
     let ts = crate::events::now_ms();
     let pem_path = dir.join(format!("proxer-ca-{ts}.pem"));
@@ -633,10 +659,10 @@ pub async fn tls_export_ca_to_downloads(
 
     tokio::fs::write(&pem_path, pem.as_bytes())
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to write PEM file: {e}"))?;
     tokio::fs::write(&cer_path, &der)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to write CER file: {e}"))?;
 
     let _ = state
         .logs

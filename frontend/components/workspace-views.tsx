@@ -2482,10 +2482,14 @@ export function ProxyView({
                           '- Firefox: Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import → select the .pem or .cer and trust for websites',
                         ].join('\n'),
                       })
+                    } catch (error) {
+                      uiToastError('Export failed', String(error))
+                      throw error
                     } finally {
                       setExportingCa(false)
                     }
-                  })().catch(() => {
+                  })().catch((error) => {
+                    console.error('CA export error:', error)
                     setExportingCa(false)
                   })
                 }}
