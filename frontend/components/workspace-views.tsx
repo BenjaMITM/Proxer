@@ -2217,6 +2217,7 @@ export function ProxyView({
   const [settings, setSettingsState] = useState<Settings | null>(null)
   const [fingerprintOptions, setFingerprintOptions] = useState<TlsFingerprintOptions | null>(null)
   const [rules, setRules] = useState<RuleSpec[]>([])
+  const [exportingCa, setExportingCa] = useState(false)
 
   const reload = async () => {
     const [ps, me, ds, s, r, fo] = await Promise.all([
@@ -2459,30 +2460,38 @@ export function ProxyView({
                 variant="outline"
                 size="sm"
                 className="flex-1"
+                disabled={exportingCa}
                 onClick={() => {
                   ;(async () => {
-                    if (!(await tlsCaInfo())) {
-                      await tlsGenerateCa()
+                    setExportingCa(true)
+                    try {
+                      if (!(await tlsCaInfo())) {
+                        await tlsGenerateCa()
+                      }
+                      const files = await tlsExportCaToDownloads()
+                      uiToastSuccess('CA exported', files.cerPath)
+                      await uiInfo({
+                        title: 'Install CA in browser',
+                        body: [
+                          'CA exported to your Downloads folder:',
+                          files.pemPath,
+                          files.cerPath,
+                          '',
+                          'Browser install (Windows):',
+                          '- Chrome/Edge: Settings → Privacy and security → Security → Manage certificates → Trusted Root Certification Authorities → Import → select the .cer',
+                          '- Firefox: Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import → select the .pem or .cer and trust for websites',
+                        ].join('\n'),
+                      })
+                    } finally {
+                      setExportingCa(false)
                     }
-                    const files = await tlsExportCaToDownloads()
-                    uiToastSuccess('CA exported', files.cerPath)
-                    await uiInfo({
-                      title: 'Install CA in browser',
-                      body: [
-                        'CA exported to your Downloads folder:',
-                        files.pemPath,
-                        files.cerPath,
-                        '',
-                        'Browser install (Windows):',
-                        '- Chrome/Edge: Settings → Privacy and security → Security → Manage certificates → Trusted Root Certification Authorities → Import → select the .cer',
-                        '- Firefox: Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import → select the .pem or .cer and trust for websites',
-                      ].join('\n'),
-                    })
-                  })().catch(() => {})
+                  })().catch(() => {
+                    setExportingCa(false)
+                  })
                 }}
               >
-                <Download className="w-4 h-4 mr-2" />
-                Export CA
+                <Download className={cn('w-4 h-4 mr-2', exportingCa && 'animate-spin')} />
+                {exportingCa ? 'Exporting...' : 'Export CA'}
               </Button>
               <Button
                 variant="outline"
